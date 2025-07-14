@@ -10,9 +10,9 @@ echo "Local IP: $LOCAL_IP"
 echo "Network base: $NETWORK_BASE"
 
 # デスクトップ環境とVNCをインストール
-sudo apt update
-sudo apt install -y ubuntu-desktop-minimal
-sudo apt install -y tightvncserver novnc websockify firefox
+apt update
+apt install -y ubuntu-desktop-minimal
+apt install -y tightvncserver novnc websockify firefox
 
 # VNCサーバーの設定
 mkdir -p ~/.vnc
@@ -31,7 +31,7 @@ EOF
 chmod +x ~/.vnc/xstartup
 
 # DNS設定を動的に更新するスクリプト
-cat > /home/ubuntu/update_dns.sh << 'EOF'
+cat > /root/update_dns.sh << 'EOF'
 #!/bin/bash
 
 # forwarderコンテナのIPを自動検出
@@ -40,19 +40,19 @@ FORWARDER_IP=$(ip route get 8.8.8.8 | grep -oP 'src \K\S+' | sed 's/\.[0-9]*$/.2
 echo "Setting DNS to forwarder: $FORWARDER_IP"
 
 # DNSサーバーを設定
-sudo systemctl disable systemd-resolved
-sudo systemctl stop systemd-resolved
+systemctl disable systemd-resolved
+systemctl stop systemd-resolved
 
 # resolv.confを更新
-echo "nameserver $FORWARDER_IP" | sudo tee /etc/resolv.conf
+echo "nameserver $FORWARDER_IP" | tee /etc/resolv.conf
 
 echo "DNS updated to use forwarder at $FORWARDER_IP"
 EOF
 
-chmod +x /home/ubuntu/update_dns.sh
+chmod +x /root/update_dns.sh
 
 # VNCとnoVNCを起動するスクリプト
-cat > /home/ubuntu/start_vnc.sh << 'EOF'
+cat > /root/start_vnc.sh << 'EOF'
 #!/bin/bash
 
 # VNCサーバーを起動
@@ -66,7 +66,7 @@ echo "Web access: http://$(hostname -I | awk '{print $1}'):6080"
 echo "VNC password: password"
 EOF
 
-chmod +x /home/ubuntu/start_vnc.sh
+chmod +x /root/start_vnc.sh
 
 echo "Client VM setup completed!"
 echo "To start VNC: ./start_vnc.sh"

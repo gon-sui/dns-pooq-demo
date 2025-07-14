@@ -15,7 +15,7 @@ sudo apt install -y python3-pip python3-dev build-essential
 pip3 install scapy
 
 # 攻撃スクリプトをダウンロード・作成
-cat > /home/ubuntu/exploit.py << 'EOF'
+cat > /root/exploit.py << 'EOF'
 #!/usr/bin/env python3
 import socket
 import threading
@@ -124,7 +124,7 @@ if __name__ == "__main__":
     main()
 EOF
 
-chmod +x /home/ubuntu/exploit.py
+chmod +x /root/exploit.py
 
 echo "Attacker VM setup completed!"
-echo "Run the exploit with: python3 /home/ubuntu/exploit.py"
+echo "Run the exploit with: python3 /root/exploit.py"

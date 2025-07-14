@@ -6,21 +6,11 @@ timezone: Asia/Tokyo
 ssh_pwauth: true
 disable_root: false
 
-# ユーザー設定
-users:
-  - default
-  - name: ubuntu
-    passwd: $6$salt$3yTvKQVn7nDw1yVFyBa6V8kVjEQQQNQQ5KjEQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ
-    lock_passwd: false
-    groups: sudo
-    shell: /bin/bash
-    sudo: ['ALL=(ALL) NOPASSWD:ALL']
-  - name: admin
-    passwd: $6$salt$3yTvKQVn7nDw1yVFyBa6V8kVjEQQQNQQ5KjEQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ
-    lock_passwd: false
-    groups: sudo
-    shell: /bin/bash
-    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+# rootパスワードを設定
+chpasswd:
+  list: |
+    root:ubuntu
+  expire: false
 
 # パッケージインストール
 packages:
@@ -31,26 +21,20 @@ packages:
   - python3-pip
   - net-tools
   - tcpdump
-  - openssh-server
 
 package_update: true
 package_upgrade: true
 
-# SSH設定の調整
+# SSH設定
 write_files:
   - path: /etc/ssh/sshd_config.d/99-custom.conf
     content: |
       PasswordAuthentication yes
       PermitRootLogin yes
-      PubkeyAuthentication yes
     permissions: '0644'
 
 runcmd:
-  - systemctl enable ssh
   - systemctl restart ssh
-  - echo "ubuntu:ubuntu" | chpasswd
-  - echo "admin:ubuntu" | chpasswd
-  - echo "root:ubuntu" | chpasswd
-  - echo "Base setup completed" > /var/log/cloud-init-setup.log
+  - echo "Setup completed" > /var/log/cloud-init-setup.log
 
-final_message: "System ready - Login: ubuntu/ubuntu or admin/ubuntu"
+final_message: "System ready - Login: root/ubuntu"
