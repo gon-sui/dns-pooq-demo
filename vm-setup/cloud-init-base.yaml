@@ -1,40 +1,19 @@
 #cloud-config
-locale: en_US.UTF-8
-timezone: Asia/Tokyo
-
-# パスワード認証を有効化
 ssh_pwauth: true
 disable_root: false
 
-# rootパスワードを設定
 chpasswd:
   list: |
     root:ubuntu
   expire: false
 
-# パッケージインストール
 packages:
   - curl
   - wget
-  - git
   - python3
   - python3-pip
-  - net-tools
-  - tcpdump
-
-package_update: true
-package_upgrade: true
-
-# SSH設定
-write_files:
-  - path: /etc/ssh/sshd_config.d/99-custom.conf
-    content: |
-      PasswordAuthentication yes
-      PermitRootLogin yes
-    permissions: '0644'
 
 runcmd:
+  - sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+  - sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
   - systemctl restart ssh
-  - echo "Setup completed" > /var/log/cloud-init-setup.log
-
-final_message: "System ready - Login: root/ubuntu"
